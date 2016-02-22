@@ -1,0 +1,65 @@
+#!/usr/bin/env ruby
+
+require "fssm"
+require "pathname"
+require "fileutils"
+require "mbed/autowriter"
+require "optparse"
+
+downloads_path = Pathname.new(ENV['HOME'] + '/Downloads/')
+mbed_volume_path = Pathname.glob('/Volumes/*').find{|path| path.to_s.upcase.include?("MBED")}
+
+opt = OptionParser.new
+opt.on('-d [DOWNLOADS_PATH eg: ~/Documents/]') {|v| downloads_path = Pathname.new(v)}
+opt.on('-m [MBED_VOLUEM_PATH eg: /Volumes/MBED/]') {|v| mbed_volume_path = Pathname.new(v)}
+opt.parse!(ARGV)
+
+unless downloads_path.exist?
+  abort("downloads_path #{downloads_path} is not found")
+end
+
+unless mbed_volume_path && mbed_volume_path.exist?
+  abort("mbed_volume_path #{mbed_volume_path} is not found")
+end
+
+puts "Donwloads Path: #{downloads_path}"
+puts "mbed Volume Path: #{mbed_volume_path}"
+
+monitor = FSSM::Monitor.new
+
+monitor.path(downloads_path.to_s) do
+  glob '*.{hex,bin}'
+  target = nil
+
+  handler = lambda {|base, relative|
+    target = Pathname.new("#{base}/#{relative}")
+
+    puts "Found: #{relative}, move to: #{mbed_volume_path}"
+    retry_count = 3
+    begin
+      FileUtils.mv(target.to_s, mbed_volume_path.to_s + '/')
+    rescue Exception => e
+      if (retry_count -= 1) >= 0
+        sleep 2
+        retry
+      end
+    end
+
+    begin
+      Process.wait(spawn('umount', mbed_volume_path.to_s, out: STDOUT, err: "/dev/null"))
+      if $?.success?
+        puts "Succeed: umount #{mbed_volume_path}"
+      end
+      sleep 1
+    rescue FSSM::CallbackError, Errno::ECHILD => e
+    ensure
+    end
+  }
+
+  update(&handler)
+  create(&handler)
+
+  delete {|base, relative| }
+end
+
+monitor.run
