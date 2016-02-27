@@ -17,7 +17,7 @@ $ mbed-autowriter -m /Volumes/NODE_L476RG/ # set mbed mount volume
 If you want auto umount, add sudo.
 
 ```
-$ sudo mbed-hex-autowriter
+$ sudo mbed-autowriter
 ```
 
 ## License
